@@ -20,10 +20,12 @@ also allows you to keep your changes in sync with this upstream repository.
 As a Python developer, you should work in a [virtual
 environment](https://virtualenv.pypa.io/en/stable/).
 
-For this, you need to have pip installed (and, since we are developing for
-Python 3 exclusively, it should be the version for Python 3).
+For this, you need to have [pip](https://pip.pypa.io/en/stable/) installed
+(and, since we are developing for Python 3 exclusively, it should be the
+version for Python 3).
 Install it with the package manager of your operating system, e.g., by
-`sudo apt install python3-pip` or by `sudo pacman -S python-pip`.
+`sudo apt install python3-pip` on Ubuntu and other Debian-based
+distributions or by `sudo pacman -S python-pip` on Arch Linux.
 
 Now, we need _virtualenv_ and _virtualenvwrapper_:
 ```sh
@@ -54,7 +56,7 @@ From within our development virtual environment do:
 pip install -e /path/to/ABNFEarley
 ```
 
-This does an editable install of our package in the site-packages of the
+This does an editable install of our package in the _site-packages_ of the
 virtual environment and, hence, makes the modules in our package available
 independently of the current working directory.
 
