@@ -1,0 +1,2 @@
+class AbstractSyntaxGraph:
+    pass
