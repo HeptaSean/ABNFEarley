@@ -63,3 +63,19 @@ independently of the current working directory.
 
 ## Tests with `unittest` and `doctest`
 TODO: First tests and documentation
+
+## Development Cycle
+We try to adhere to a development strategy, where we repeat the following
+steps:
+1. We draft the documentation of a feature (more or less complete).
+2. We write unit tests according to the documentation.
+3. We implement the feature and test it with the unit tests.
+4. We clarify the documentation and add (`doctest`able) examples.
+
+Bug fixes and small enhancements can often skip steps 1 and 4 if they are
+to small or exceptional to be referred to in the documentation.
+
+If you want to report an issue, it is of great help to include a unit test
+showing the problem, perhaps even in an issue branch in a forked
+repositiory, so that the issue test and hopefully also its solution can
+later easily be integrated by a pull request.
