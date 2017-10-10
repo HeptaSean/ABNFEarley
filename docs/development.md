@@ -3,7 +3,7 @@
 ## Cloning the Repository
 If you want to modify the code, you can clone this repository with git:
 ```sh
-git clone TODO
+git clone https://github.com/HeptaSean/ABNFEarley.git
 ```
 
 If you want your changes included in the upstream code, you can create a
