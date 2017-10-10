@@ -9,15 +9,27 @@ ABNF”](https://www.rfc-editor.org/info/rfc5234) and updated in [RFC 7405
 “Case-Sensitive String Support in
 ABNF”](https://www.rfc-editor.org/info/rfc7405).
 
+## TODO
+- [ ] Document, test, and implement the model for grammars
+- [ ] Document, test, and implement the model for parse results
+- [ ] Document, test, and implement the parser itself
+- [ ] Add folder with example ABNF files and use them on test inputs
+- [ ] Write a script for executing an ABNF grammar file on an input file
+
 ## Installation
-TODO: Upload to PyPI and give installation instructions.
+The _abnfearley_ package is implemented in Python 3.
+If it is not already present on your system, it can be installed by, e.g.,
+`sudo apt install python3` on Ubuntu and other Debian-based distributions
+or by `sudo pacman -S python` on Arch Linux.
+
+- [ ] Upload to PyPI and give installation instructions with pip and
+easy_install.
 
 ## Basic Usage
-TODO: Give an example with a small toy grammar (loaded from a file) in an
+- [ ] Give example with small toy grammar (loaded from file) in an
 interactive python session.
-
-TODO: Create a demonstration script, which gets an ABNF grammar file and
-a target file and shows the resulting abstract syntax graph or gives
+- [ ] Create a demonstration script, which gets an ABNF grammar file and a
+target file and shows the resulting abstract syntax graph or gives
 meaningful errors.
 
 ## Further Documentation
