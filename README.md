@@ -1,5 +1,5 @@
-# _abnfearley_ – An Earley parser for ABNF grammars in Python
-_abnfearley_ is a parser for Augmented Backus-Naur Form (ABNF) grammars.
+# ABNFEarley – An Earley parser for ABNF grammars in Python
+_ABNFEarley_ is a parser for Augmented Backus-Naur Form (ABNF) grammars.
 It uses an adaption of the techniques given in Jay Earley's 1970
 paper “An Efficient Context-Free Parsing Algorithm”
 [[doi:10.1145/362007.362035]](https://doi.org/10.1145/362007.362035).
@@ -17,7 +17,7 @@ ABNF”](https://www.rfc-editor.org/info/rfc7405).
 - [ ] Write a script for executing an ABNF grammar file on an input file
 
 ## Installation
-The _abnfearley_ package is implemented in Python 3.
+The `abnfearley` package is implemented in Python 3.
 If it is not already present on your system, it can be installed by, e.g.,
 `sudo apt install python3` on Ubuntu and other Debian-based distributions
 or by `sudo pacman -S python` on Arch Linux.
