@@ -9,9 +9,8 @@ Alternation -- contains alternative GrammarElements
 Concatenation -- contains concatenated GrammarElements
 Repetition -- contains repeated GrammarElement with lower and upper
               bound
-LiteralString --
-CaseInsensitiveLiteralString --
-LiteralRange --
+LiteralString -- matches literal string to input
+LiteralRange -- matches range of literal bytes to input
 RuleCall -- call of grammar rule from within right-hand side
 """
 import os
@@ -27,11 +26,9 @@ class Grammar(Mapping[str, 'GrammarElement']):
     Concatenation, Repetition, literal and RuleCall instances).
     """
 
-    __slots__ = ['_name', '_rules', '_imports']
-
     def __init__(self, name: str,
                  rules: Mapping[str, 'GrammarElement'],
-                 imports: Sequence['Grammar'] = []) -> None:
+                 imports: Optional[Sequence['Grammar']] = None) -> None:
         """Initialise with mapping from rule names to right-hand sides.
 
         Arguments:
@@ -45,22 +42,35 @@ class Grammar(Mapping[str, 'GrammarElement']):
         """
         self._name = name
         self._rules = rules
-        self._imports = imports
+        if imports is not None:
+            self._imports = imports
+        else:
+            self._imports = []
         for rule, rhs in self._rules.items():
-            rhs._register(self, rule, self)
+            rhs.register(self, rule, self)
 
     @property
     def name(self) -> str:
         """Get name of grammar."""
         return self._name
 
+    @property
+    def rules(self) -> Mapping[str, 'GrammarElement']:
+        """Get rules of grammar."""
+        return self._rules
+
+    @property
+    def imports(self) -> Sequence['Grammar']:
+        """Get imported grammars."""
+        return self._imports
+
     def __getitem__(self, rule: str) -> 'GrammarElement':
         """Get rule from grammar or its imports."""
         if rule in self._rules:
             return self._rules[rule]
         for grammar in self._imports:
-            if rule in grammar._rules:
-                return grammar._rules[rule]
+            if rule in grammar:
+                return grammar[rule]
         raise KeyError("Rule '{}' not defined in grammar '{}'.".format(
             rule, self._name))
 
@@ -69,23 +79,23 @@ class Grammar(Mapping[str, 'GrammarElement']):
         for rule in self._rules:
             yield rule
         for grammar in self._imports:
-            for rule in grammar._rules:
+            for rule in grammar:
                 yield rule
 
     def __len__(self) -> int:
         """Total number of rules in grammar and imports."""
         length = len(self._rules)
         for grammar in self._imports:
-            length += len(grammar._rules)
+            length += len(grammar)
         return length
 
     def __eq__(self, other: object) -> bool:
-        """Recursively check strict structural equality."""
+        """Recursively check structural equality."""
         if not isinstance(other, Grammar):
             return False
-        return (self._name == other._name and
-                self._rules == other._rules and
-                self._imports == other._imports)
+        return (self.name == other.name and
+                self.rules == other.rules and
+                self.imports == other.imports)
 
     def __repr__(self, indent: int = 0) -> str:
         """Get evaluable representation."""
@@ -121,7 +131,8 @@ class Grammar(Mapping[str, 'GrammarElement']):
         if self._imports:
             result += os.linesep
             result += '; uses rules from '
-            result += ', '.join([g.name for g in self._imports])
+            import_names = [g.name for g in self._imports]
+            result += ', '.join(import_names)
         for rule, rhs in self._rules.items():
             result += os.linesep
             result += '{!s} = {!s}'.format(rule, rhs)
@@ -130,8 +141,6 @@ class Grammar(Mapping[str, 'GrammarElement']):
 
 class GrammarElement(metaclass=ABCMeta):
     """Abstract base class for all kinds of grammar elements."""
-
-    __slots__ = ['_parent', '_rule', '_grammar']
 
     def __init__(self) -> None:
         """Trivially initialise GrammarElement."""
@@ -156,10 +165,21 @@ class GrammarElement(metaclass=ABCMeta):
                 type(parent), rule, grammar.name)
         return "unknown location"
 
-    @abstractmethod
-    def _register(self, parent: Union['GrammarElement', Grammar],
-                  rule: str, grammar: Grammar) -> None:
-        if hasattr(self, '_parent'):
+    def register(self, parent: Union['GrammarElement', Grammar],
+                 rule: str, grammar: Grammar) -> None:
+        """Register GrammarElement at a parent.
+
+        Arguments:
+        parent -- direct parent containing this element
+                  (other GrammarElement or Grammar)
+        rule -- name of rule containing this element
+        grammar -- Grammar containing this element
+                   (can be same as parent for direct right-hand sides)
+
+        Note: This method should only be called by Grammar.__init__ or
+        the register method of other GrammarElement instances.
+        """
+        if self._parent is not None:
             raise ValueError(
                 '{} registered at {} is already registered at {}.'.format(
                     type(self),
@@ -213,8 +233,6 @@ class Alternation(GrammarElement, Sequence[GrammarElement]):
     Alternation to match.
     """
 
-    __slots__ = ['_elements']
-
     def __init__(self, elements: Sequence[GrammarElement]) -> None:
         """Initialise with sequence of alternatives.
 
@@ -224,6 +242,7 @@ class Alternation(GrammarElement, Sequence[GrammarElement]):
         Note: While a mutable sequence could be given as argument, we
         assume that it is not mutated after initialisation.
         """
+        super().__init__()
         self._elements = elements
 
     def __getitem__(self, key):  # type: ignore
@@ -234,17 +253,34 @@ class Alternation(GrammarElement, Sequence[GrammarElement]):
         """Get number of alternatives."""
         return len(self._elements)
 
-    def _register(self, parent: Union[GrammarElement, Grammar],
-                  rule: str, grammar: Grammar) -> None:
-        super()._register(parent, rule, grammar)
+    def register(self, parent: Union[GrammarElement, Grammar],
+                 rule: str, grammar: Grammar) -> None:
+        """Register GrammarElement at a parent.
+
+        Arguments:
+        parent -- direct parent containing this element
+                  (other GrammarElement or Grammar)
+        rule -- name of rule containing this element
+        grammar -- Grammar containing this element
+                   (can be same as parent for direct right-hand sides)
+
+        Note: This method should only be called by Grammar.__init__ or
+        the register method of other GrammarElement instances.
+        """
+        super().register(parent, rule, grammar)
         for element in self._elements:
-            element._register(self, rule, grammar)
+            element.register(self, rule, grammar)
 
     def __eq__(self, other: object) -> bool:
         """Recursively check strict structural equality."""
         if not isinstance(other, Alternation):
             return False
-        return self._elements == other._elements
+        if len(self) != len(other):
+            return False
+        for self_element, other_element in zip(self, other):
+            if self_element != other_element:
+                return False
+        return True
 
     def __repr__(self, indent: int = 0) -> str:
         """Get evaluable representation."""
@@ -263,16 +299,17 @@ class Alternation(GrammarElement, Sequence[GrammarElement]):
 
     def __str__(self, needs_parens: bool = False) -> str:
         """Get ABNF representation."""
+        result = '()'
         if self._elements:
             if len(self._elements) == 1:
-                return self._elements[0].__str__(needs_parens)
-            result = ' / '.join(
-                [element.__str__(True) for element in self._elements])
-            if needs_parens:
-                return '(' + result + ')'
+                result = self._elements[0].__str__(needs_parens)
             else:
-                return result
-        return '()'
+                result = ' / '.join(
+                    [element.__str__(True)
+                     for element in self._elements])
+                if needs_parens:
+                    result = '(' + result + ')'
+        return result
 
 
 class Concatenation(GrammarElement, Sequence[GrammarElement]):
@@ -281,8 +318,6 @@ class Concatenation(GrammarElement, Sequence[GrammarElement]):
     All contained elements have to match the input in order for the
     Concatenation to match.
     """
-
-    __slots__ = ['_elements']
 
     def __init__(self, elements: Sequence[GrammarElement]) -> None:
         """Initialise with sequence of concatenated elements.
@@ -293,6 +328,7 @@ class Concatenation(GrammarElement, Sequence[GrammarElement]):
         Note: While a mutable sequence could be given as argument, we
         assume that it is not mutated after initialisation.
         """
+        super().__init__()
         self._elements = elements
 
     def __getitem__(self, key):  # type: ignore
@@ -303,17 +339,34 @@ class Concatenation(GrammarElement, Sequence[GrammarElement]):
         """Get length of concatenation."""
         return len(self._elements)
 
-    def _register(self, parent: Union[GrammarElement, Grammar],
-                  rule: str, grammar: Grammar) -> None:
-        super()._register(parent, rule, grammar)
+    def register(self, parent: Union[GrammarElement, Grammar],
+                 rule: str, grammar: Grammar) -> None:
+        """Register GrammarElement at a parent.
+
+        Arguments:
+        parent -- direct parent containing this element
+                  (other GrammarElement or Grammar)
+        rule -- name of rule containing this element
+        grammar -- Grammar containing this element
+                   (can be same as parent for direct right-hand sides)
+
+        Note: This method should only be called by Grammar.__init__ or
+        the register method of other GrammarElement instances.
+        """
+        super().register(parent, rule, grammar)
         for element in self._elements:
-            element._register(self, rule, grammar)
+            element.register(self, rule, grammar)
 
     def __eq__(self, other: object) -> bool:
         """Recursively check strict structural equality."""
         if not isinstance(other, Concatenation):
             return False
-        return self._elements == other._elements
+        if len(self) != len(other):
+            return False
+        for self_element, other_element in zip(self, other):
+            if self_element != other_element:
+                return False
+        return True
 
     def __repr__(self, indent: int = 0) -> str:
         """Get evaluable representation."""
@@ -332,16 +385,17 @@ class Concatenation(GrammarElement, Sequence[GrammarElement]):
 
     def __str__(self, needs_parens: bool = False) -> str:
         """Get ABNF representation."""
+        result = '()'
         if self._elements:
             if len(self._elements) == 1:
-                return self._elements[0].__str__(needs_parens)
-            result = ' '.join(
-                [element.__str__(True) for element in self._elements])
-            if needs_parens:
-                return '(' + result + ')'
+                result = self._elements[0].__str__(needs_parens)
             else:
-                return result
-        return '()'
+                result = ' '.join(
+                    [element.__str__(True)
+                     for element in self._elements])
+                if needs_parens:
+                    result = '(' + result + ')'
+        return result
 
 
 class Repetition(GrammarElement):
@@ -352,8 +406,6 @@ class Repetition(GrammarElement):
     match arbitrarily often.
     """
 
-    __slots__ = ['_element', '_lower', '_upper']
-
     def __init__(self, element: GrammarElement,
                  lower: int = 0, upper: Optional[int] = None) -> None:
         """Initialise with repeated element and optionally bounds.
@@ -363,6 +415,7 @@ class Repetition(GrammarElement):
         lower -- lower bound (defaults to 0)
         upper -- upper bound (defaults to unbound, represented by None)
         """
+        super().__init__()
         self._element = element
         self._lower = lower
         self._upper = upper
@@ -382,18 +435,30 @@ class Repetition(GrammarElement):
         """Get upper bound."""
         return self._upper
 
-    def _register(self, parent: Union[GrammarElement, Grammar],
-                  rule: str, grammar: Grammar) -> None:
-        super()._register(parent, rule, grammar)
-        self._element._register(self, rule, grammar)
+    def register(self, parent: Union[GrammarElement, Grammar],
+                 rule: str, grammar: Grammar) -> None:
+        """Register GrammarElement at a parent.
+
+        Arguments:
+        parent -- direct parent containing this element
+                  (other GrammarElement or Grammar)
+        rule -- name of rule containing this element
+        grammar -- Grammar containing this element
+                   (can be same as parent for direct right-hand sides)
+
+        Note: This method should only be called by Grammar.__init__ or
+        the register method of other GrammarElement instances.
+        """
+        super().register(parent, rule, grammar)
+        self._element.register(self, rule, grammar)
 
     def __eq__(self, other: object) -> bool:
         """Recursively check strict structural equality."""
         if not isinstance(other, Repetition):
             return False
-        return (self._element == other._element and
-                self._lower == other._lower and
-                self._upper == other._upper)
+        return (self.element == other.element and
+                self.lower == other.lower and
+                self.upper == other.upper)
 
     def __repr__(self, indent: int = 0) -> str:
         """Get evaluable representation."""
@@ -408,23 +473,26 @@ class Repetition(GrammarElement):
 
     def __str__(self, needs_parens: bool = False) -> str:
         """Get ABNF representation."""
+        result = '()'
         if self._lower == self._upper:
             if self._lower == 1:
-                return self._element.__str__(needs_parens)
+                result = self._element.__str__(needs_parens)
             elif self._lower > 1:
-                return str(self._lower) + self._element.__str__(True)
+                result = (str(self._lower) +
+                          self._element.__str__(True))
         elif self._upper is None:
             if self._lower == 0:
-                return '*' + self._element.__str__(True)
+                result = '*' + self._element.__str__(True)
             else:
-                return str(self._lower) + '*' + self._element.__str__(True)
-        else:
-            if self._upper == 1:
-                return '[' + self._element.__str__(False) + ']'
+                result = (str(self._lower) + '*' +
+                          self._element.__str__(True))
+        else:  # self.lower != self.upper and self.upper < *
+            if self._upper == 1:  # self.lower == 0
+                result = '[' + self._element.__str__(False) + ']'
             else:
-                return (str(self._lower) + '*' + str(self._upper) +
-                        self._element.__str__(True))
-        return '()'
+                result = (str(self._lower) + '*' + str(self._upper) +
+                          self._element.__str__(True))
+        return result
 
 
 class LiteralString(GrammarElement):
@@ -433,8 +501,6 @@ class LiteralString(GrammarElement):
     The string is matched verbatim against the input.
     """
 
-    __slots__ = ['_string', '_case_sensitive']
-
     def __init__(self, string: bytes, case_sensitive: bool = True) -> None:
         """Initialise with string to accept.
 
@@ -442,6 +508,7 @@ class LiteralString(GrammarElement):
         string -- the string of bytes to match
         case_sensitive -- whether the string should match case-sensitive
         """
+        super().__init__()
         self._string = string
         self._case_sensitive = case_sensitive
 
@@ -455,16 +522,12 @@ class LiteralString(GrammarElement):
         """Get case-sensitivity."""
         return self._case_sensitive
 
-    def _register(self, parent: Union[GrammarElement, Grammar],
-                  rule: str, grammar: Grammar) -> None:
-        super()._register(parent, rule, grammar)
-
     def __eq__(self, other: object) -> bool:
         """Recursively check strict structural equality."""
         if not isinstance(other, LiteralString):
             return False
-        return (self._string == other._string and
-                self._case_sensitive == other._case_sensitive)
+        return (self.string == other.string and
+                self.case_sensitive == other.case_sensitive)
 
     def __repr__(self, indent: int = 0) -> str:
         """Get evaluable representation."""
@@ -504,7 +567,7 @@ class LiteralString(GrammarElement):
                     result += '%x'
                     in_hex_val = True
                     components += 1
-                result += '{2X}'.format(byte)
+                result += '{0:2X}'.format(byte)
         if in_char_val:
             result += '"'
             in_char_val = False
@@ -519,8 +582,6 @@ class LiteralRange(GrammarElement):
     The current byte of the string is matched against a range of bytes.
     """
 
-    __slots__ = ['_first', '_last']
-
     def __init__(self, first: int, last: int) -> None:
         """Initialise with first and last byte of range.
 
@@ -528,6 +589,7 @@ class LiteralRange(GrammarElement):
         first -- code of the first byte of the matched range
         last -- codef of the last byte of the matched range
         """
+        super().__init__()
         self._first = first
         self._last = last
 
@@ -541,16 +603,12 @@ class LiteralRange(GrammarElement):
         """Get code of last byte of matched range."""
         return self._last
 
-    def _register(self, parent: Union[GrammarElement, Grammar],
-                  rule: str, grammar: Grammar) -> None:
-        super()._register(parent, rule, grammar)
-
     def __eq__(self, other: object) -> bool:
         """Recursively check strict structural equality."""
         if not isinstance(other, LiteralRange):
             return False
-        return (self._first == other._first and
-                self._last == other._last)
+        return (self.first == other.first and
+                self.last == other.last)
 
     def __repr__(self, indent: int = 0) -> str:
         """Get evaluable representation."""
@@ -564,7 +622,7 @@ class LiteralRange(GrammarElement):
 
     def __str__(self, needs_parens: bool = False) -> str:
         """Get ABNF representation."""
-        result = '%x{2X}-{2X}'.format(self._first, self._last)
+        result = '%x{0:2X}-{1:2X}'.format(self._first, self._last)
         return result
 
 
@@ -574,14 +632,13 @@ class RuleCall(GrammarElement):
     The called rule has to match the input for the RuleCall to match.
     """
 
-    __slots__ = ['_call']
-
     def __init__(self, call: str) -> None:
         """Initialise with name of called rule.
 
         Arguments:
         call -- the called rule
         """
+        super().__init__()
         self._call = call
 
     @property
@@ -589,9 +646,21 @@ class RuleCall(GrammarElement):
         """Get called rule."""
         return self._call
 
-    def _register(self, parent: Union[GrammarElement, Grammar],
-                  rule: str, grammar: Grammar) -> None:
-        super()._register(parent, rule, grammar)
+    def register(self, parent: Union[GrammarElement, Grammar],
+                 rule: str, grammar: Grammar) -> None:
+        """Register GrammarElement at a parent.
+
+        Arguments:
+        parent -- direct parent containing this element
+                  (other GrammarElement or Grammar)
+        rule -- name of rule containing this element
+        grammar -- Grammar containing this element
+                   (can be same as parent for direct right-hand sides)
+
+        Note: This method should only be called by Grammar.__init__ or
+        the register method of other GrammarElement instances.
+        """
+        super().register(parent, rule, grammar)
         if self._call not in grammar:
             raise ValueError(
                 "Called rule '{}' not defined in grammar {}.".format(
@@ -601,7 +670,7 @@ class RuleCall(GrammarElement):
         """Recursively check strict structural equality."""
         if not isinstance(other, RuleCall):
             return False
-        return self._call == other._call
+        return self.call == other.call
 
     def __repr__(self, indent: int = 0) -> str:
         """Get evaluable representation."""
